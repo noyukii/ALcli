@@ -4,75 +4,63 @@ AniList in the terminal. Browse trending anime, search, manage your list, and vi
 
 ## Install
 
+Download a checksum-verified GitHub Release binary (macOS or Linux, arm64 or amd64):
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noyukii/ALcli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/noyukii/ALcli/main/install.sh | bash -s -- --yes
 ```
 
-The installer uses [gum](https://github.com/charmbracelet/gum). If gum is missing, the script installs it first. Go 1.26 or newer is required, because ALcli is built from source.
+The default location is `~/.local/bin`; add it to `PATH` if needed. No Go or gum installation is required for a release install. Running `./install.sh` from a checkout with Go installed builds the current source.
 
-Both of these commands run the same program:
+To install the same `alcli` AI skill used by the plugin:
 
 ```bash
-anilist
-al
+curl -fsSL https://raw.githubusercontent.com/noyukii/ALcli/main/install.sh | bash -s -- --yes --with-skill codex
 ```
 
-The default install location is `/usr/local/bin`. Pick "Just for me" in the prompt to install into `~/.local/bin` instead.
+The installer updates its own skill safely on repeated runs. `./install.sh --yes --uninstall` removes `anilist`, its `al` alias, and only an installer-managed skill. Use `--prefix DIR` for another binary directory.
 
-From a checkout of this repo:
+## CLI and local MCP
 
-```bash
-./install.sh
-```
-
-Skip the prompts:
+`anilist` and `al` are the same command. With no arguments, ALcli opens the terminal UI. Commands can emit JSON with `--output json`.
 
 ```bash
-./install.sh --yes --prefix /usr/local/bin
-```
-
-Remove both commands:
-
-```bash
-./install.sh --uninstall --prefix /usr/local/bin
-```
-
-## Usage
-
-```bash
-anilist help
-al help media
-anilist
-al --images=kitty
-anilist --images=off
-anilist --logout
-anilist --config
-
-# Browse and search
 al media search "Frieren" --type anime
-al media trending --type anime --page 1
-al media seasonal --season fall --year 2026
 al media get 154587
-
-# Your account
-al auth login
-al auth status
-al profile
-al favorites --output json
+al characters list --search "Frieren" --page 1
+al follows list --id 123
 al list show --type manga
-al list set 154587 --status current --progress 3 --score 8
+al list set 154587 --status current --progress 3
 al list delete 12345 --yes
+al action follows_toggle --variables '{"userId":123}'
+al graphql query --document 'query { Viewer { id name } }'
+al graphql mutation --file change.graphql --variables '{"id":123}'
 ```
 
-`--images` accepts `auto`, `halfblock`, `kitty`, or `off`.
+Use the media ID when setting a list entry and the list entry ID when deleting one. Named commands cover media, airing, characters, staff, studios, users, lists, favorites, follows, activities, messages, forums, reviews, recommendations, and notifications. `al action --help` lists named account changes. Raw GraphQL covers schema fields and mutations not exposed by a named command. AniList applies the signed-in user's permissions.
 
-Running without a command opens the TUI. Commands print readable terminal output by default; pass `--output json` for JSON output.
+```bash
+al mcp stdio                    # Agent Plugins launcher uses this
+al mcp http --listen 127.0.0.1:8765
+al mcp token                    # local HTTP bearer token; keep private
+```
 
-Sign in with `al auth login` or from the TUI auth screen using an AniList access token. `anilist --config` prints the file that stores the token.
+HTTP is opt-in, binds only to `127.0.0.1`, and requires its locally generated bearer token. The plugin archive is attached to GitHub Releases and includes the new ALcli icon, local MCP launcher, and the same skill as `--with-skill codex`. Install the `al` binary before enabling the plugin.
 
-Media search supports `--type anime|manga`, `--genre`, `--status`, `--format`, `--season`, `--year`, `--page`, and `--per-page`. List deletion prompts before proceeding; use `--yes` to skip confirmation in scripts.
+## Login
 
-The command interface currently covers media discovery/details, the authenticated user's profile/stats, favourites, and anime/manga list management. Community features such as activity, forums, reviews, and notifications are not yet exposed as commands.
+Previously saved AniList tokens remain usable. Browser login uses the ALcli AniList OAuth application (Client ID `52200`) with redirect `http://127.0.0.1:43819/callback`:
+
+```bash
+al auth login --browser
+al auth status
+```
+
+The CLI opens the authorization URL and waits for the local callback. The MCP `auth_login` tool returns the URL; `auth_login_status` reports callback progress and `auth_status` reports saved authentication. Set `ALCLI_OAUTH_CLIENT_ID` only when developing against a different AniList application. Manual token login in the terminal UI remains available. `al --config` shows the config path without displaying the token.
+
+## Release
+
+Pushing a `v*` tag builds four binary archives, `checksums.txt`, and `alcli-plugin.zip` through [the release workflow](.github/workflows/release.yml). The installer uses the latest release.
 
 ## Keys
 

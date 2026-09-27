@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -68,5 +69,16 @@ func TestUnauthorizedResponseIsAnError(t *testing.T) {
 	})
 	if _, err := client.GetViewer(); err == nil || !strings.Contains(err.Error(), "Unauthorized") {
 		t.Fatalf("GetViewer() error = %v", err)
+	}
+}
+
+func TestRateLimitExposesRetryAfter(t *testing.T) {
+	client := NewClient("")
+	client.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 429, Body: io.NopCloser(strings.NewReader(`{"errors":[{"message":"Too Many Requests"}]}`)), Header: http.Header{"Retry-After": []string{"30"}}}, nil
+	})
+	_, err := client.Execute(context.Background(), "query { Viewer { id } }", nil)
+	if err == nil || !strings.Contains(err.Error(), "30 seconds") {
+		t.Fatalf("rate limit error=%v", err)
 	}
 }

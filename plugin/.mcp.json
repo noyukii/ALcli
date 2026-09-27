@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "alcli": {
+      "type": "stdio",
+      "command": "./bin/alcli-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

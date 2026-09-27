@@ -2,10 +2,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,13 +26,23 @@ func (e *AnilistError) Error() string {
 type Client struct {
 	token      string
 	httpClient *http.Client
+	endpoint   string
 }
 
 func NewClient(token string) *Client {
 	return &Client{
 		token:      token,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		endpoint:   GraphQLURL,
 	}
+}
+
+// NewClientAt uses a supplied GraphQL endpoint, primarily for local clients
+// and integration tests that do not contact AniList.
+func NewClientAt(token, endpoint string) *Client {
+	client := NewClient(token)
+	client.endpoint = endpoint
+	return client
 }
 
 func (c *Client) SetToken(token string) {
@@ -38,6 +50,15 @@ func (c *Client) SetToken(token string) {
 }
 
 func (c *Client) request(query string, variables map[string]any) (map[string]any, error) {
+	return c.Execute(context.Background(), query, variables)
+}
+
+// Execute sends a GraphQL document to AniList. The document can be a query or
+// mutation; AniList applies the permissions of the configured access token.
+func (c *Client) Execute(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, fmt.Errorf("GraphQL document is empty")
+	}
 	payload := map[string]any{"query": query}
 	if len(variables) > 0 {
 		filtered := map[string]any{}
@@ -52,7 +73,7 @@ func (c *Client) request(query string, variables map[string]any) (map[string]any
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(http.MethodPost, GraphQLURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -71,10 +92,17 @@ func (c *Client) request(query string, variables map[string]any) (map[string]any
 		return nil, &AnilistError{Message: fmt.Sprintf("Network error: %v", err)}
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, &AnilistError{Message: "Rate limited by AniList API. Please wait a moment.", StatusCode: 429}
+		message := "Rate limited by AniList API. Wait before another request."
+		if seconds, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && seconds > 0 {
+			message = fmt.Sprintf("Rate limited by AniList API. Retry after %d seconds.", seconds)
+		}
+		return nil, &AnilistError{Message: message, StatusCode: 429}
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, &AnilistError{Message: "Unauthorized. Your access token may be invalid or expired.", StatusCode: 401}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &AnilistError{Message: fmt.Sprintf("AniList API returned HTTP %d", resp.StatusCode), StatusCode: resp.StatusCode}
 	}
 	var data map[string]any
 	if err := json.Unmarshal(raw, &data); err != nil {
