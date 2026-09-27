@@ -50,15 +50,3 @@ anilist --config
 `--images` accepts `auto`, `halfblock`, `kitty`, or `off`.
 
 Sign in from the auth screen with an AniList access token. `anilist --config` prints the file that stores it.
-
-## Keys
-
-| Key | Action |
-| --- | --- |
-| `1`–`4` | Home, Search, My List, Profile |
-| `j`/`k` or arrows | Move |
-| `/` | Focus search |
-| `Enter` | Open the selected item |
-| `e` | Edit the list entry |
-| `?` | Help |
-| `q` | Back, or quit |
