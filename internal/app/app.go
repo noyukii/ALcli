@@ -46,6 +46,13 @@ func New(cfg *config.Config) *App {
 	return a
 }
 
+// NewLogin opens the authentication screen even when a token is already saved.
+func NewLogin(cfg *config.Config) *App {
+	a := &App{cfg: cfg, help: help.New()}
+	a.push(views.NewAuth(cfg))
+	return a
+}
+
 func (a *App) Init() tea.Cmd {
 	cmds := []tea.Cmd{}
 	if a.client != nil {

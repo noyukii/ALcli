@@ -17,6 +17,9 @@ type Config struct {
 }
 
 func Dir() string {
+	if dir := os.Getenv("ALCLI_CONFIG_DIR"); dir != "" {
+		return dir
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		base = filepath.Join(os.Getenv("HOME"), ".config")

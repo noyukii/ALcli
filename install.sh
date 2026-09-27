@@ -256,7 +256,13 @@ uninstall_cmds() {
 }
 
 install_cmds() {
-  local source build_dir
+  local source build_dir action result
+  action="Install"
+  result="installed"
+  if [[ -e "${PREFIX}/${BIN_NAME}" || -e "${PREFIX}/${ALIAS_NAME}" ]]; then
+    action="Update"
+    result="updated"
+  fi
   source="$(local_source || true)"
   build_dir="$(mktemp -d)"
   # shellcheck disable=SC2064
@@ -279,14 +285,8 @@ install_cmds() {
     die "Build finished without an anilist binary."
   fi
 
-  if [[ -e "${PREFIX}/${BIN_NAME}" && "$YES" -ne 1 ]]; then
-    if ! confirm "Replace existing ${PREFIX}/${BIN_NAME}?"; then
-      say "Cancelled."
-      exit 0
-    fi
-  fi
-  if [[ -e "${PREFIX}/${ALIAS_NAME}" && ! -L "${PREFIX}/${ALIAS_NAME}" && "$YES" -ne 1 ]]; then
-    if ! confirm "${PREFIX}/${ALIAS_NAME} already exists and is not a symlink. Replace it?"; then
+  if [[ "$action" == "Update" && "$YES" -ne 1 ]]; then
+    if ! confirm "An existing ALcli installation was detected in ${PREFIX}. Update it?"; then
       say "Cancelled."
       exit 0
     fi
@@ -297,7 +297,7 @@ install_cmds() {
 
   say --foreground 212 --border double --border-foreground 212 --align center \
     --width 46 --margin "1 2" --padding "1 2" --bold \
-    "ALcli installed" "anilist" "al"
+    "ALcli ${result}" "anilist" "al"
 
   case ":${PATH}:" in
     *":${PREFIX}:"*) ;;

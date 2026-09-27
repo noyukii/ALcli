@@ -1,7 +1,7 @@
 package main
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/noyukii/ALcli/internal/app"
+	"github.com/noyukii/ALcli/internal/cli"
 	"github.com/noyukii/ALcli/internal/config"
 	"github.com/noyukii/ALcli/internal/views"
 )
@@ -35,47 +36,34 @@ func resolveImageMode(pref string, noImages bool) views.RenderMode {
 }
 
 func main() {
-	noImages := flag.Bool("no-images", false, "Disable image rendering (alias for --images=off).")
-	imagesMode := flag.String("images", "auto", "Cover render mode: auto | halfblock | kitty | off.")
-	logout := flag.Bool("logout", false, "Remove stored authentication token and exit.")
-	showConfig := flag.Bool("config", false, "Show the path to the configuration file and exit.")
-	flag.Parse()
-
-	if *showConfig {
-		fmt.Println("Config file:", config.File())
-		os.Exit(0)
-	}
-
-	if *logout {
-		cfg, err := config.Load()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error loading config:", err)
-			os.Exit(1)
-		}
-		if !cfg.IsAuthenticated() {
-			fmt.Println("You are not currently logged in.")
-			os.Exit(0)
-		}
-		if err := config.Delete(); err != nil {
-			fmt.Fprintln(os.Stderr, "Error removing config:", err)
-			os.Exit(1)
-		}
-		fmt.Println("Logged out successfully. Your access token has been removed.")
-		os.Exit(0)
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error loading config:", err)
+	err := cli.Execute(os.Args[1:], os.Stdout, os.Stderr)
+	var tui cli.TUIRequest
+	if err != nil && !errors.As(err, &tui) {
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-
-	app.SetImageMode(resolveImageMode(*imagesMode, *noImages))
-	a := app.New(cfg)
-
-	p := tea.NewProgram(a, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if _, err := p.Run(); err != nil {
+	if err == nil {
+		return
+	}
+	if err := runTUI(tui); err != nil {
 		fmt.Fprintln(os.Stderr, "Error running program:", err)
 		os.Exit(1)
 	}
+}
+
+func runTUI(request cli.TUIRequest) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	app.SetImageMode(resolveImageMode(request.Images, request.NoImages))
+	a := app.New(cfg)
+	if request.Login {
+		a = app.NewLogin(cfg)
+	}
+	p := tea.NewProgram(a, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("run TUI: %w", err)
+	}
+	return nil
 }

@@ -3,64 +3,64 @@ package api
 import "fmt"
 
 type Character struct {
-	ID         int
-	NameFull   string
-	NameNative *string
-	ImageURL   *string
-	Role       string
+	ID         int     `json:"id"`
+	NameFull   string  `json:"nameFull"`
+	NameNative *string `json:"nameNative,omitempty"`
+	ImageURL   *string `json:"imageUrl,omitempty"`
+	Role       string  `json:"role"`
 }
 
 // Trailer is a video trailer hosted on an external site (usually YouTube).
 type Trailer struct {
-	ID   string
-	Site string
+	ID   string `json:"id"`
+	Site string `json:"site"`
 }
 
 // Relation is a related-work edge (sequel, prequel, side story, …).
 type Relation struct {
-	RelationType string
-	Media        Media
+	RelationType string `json:"relationType"`
+	Media        Media  `json:"media"`
 }
 
 type Media struct {
-	ID                   int
-	TitleRomaji          string
-	TitleEnglish         *string
-	TitleNative          *string
-	Type                 string
-	Format               *string
-	Status               *string
-	Description          *string
-	Episodes             *int
-	Chapters             *int
-	Volumes              *int
-	Duration             *int
-	Score                *float64
-	Genres               []string
-	Tags                 []string
-	CoverImageMedium     *string
-	CoverImageLarge      *string
-	CoverImageExtraLarge *string
-	BannerImage          *string
-	Season               *string
-	SeasonYear           *int
-	Year                 *int
-	Popularity           int
-	Favourites           int
-	Studios              []string
-	Characters           []Character
-	Trailer              *Trailer
-	Relations            []Relation
-	Recommendations      []Media
-	Source               *string
-	Country              *string
-	IsAdult              bool
-	SiteURL              *string
-	ListEntryID          *int
-	ListStatus           *string
-	ListProgress         *int
-	ListScore            *float64
-	ListNotes            *string
+	ID                   int         `json:"id"`
+	TitleRomaji          string      `json:"titleRomaji"`
+	TitleEnglish         *string     `json:"titleEnglish,omitempty"`
+	TitleNative          *string     `json:"titleNative,omitempty"`
+	Type                 string      `json:"type"`
+	Format               *string     `json:"format,omitempty"`
+	Status               *string     `json:"status,omitempty"`
+	Description          *string     `json:"description,omitempty"`
+	Episodes             *int        `json:"episodes,omitempty"`
+	Chapters             *int        `json:"chapters,omitempty"`
+	Volumes              *int        `json:"volumes,omitempty"`
+	Duration             *int        `json:"duration,omitempty"`
+	Score                *float64    `json:"score,omitempty"`
+	Genres               []string    `json:"genres"`
+	Tags                 []string    `json:"tags"`
+	CoverImageMedium     *string     `json:"coverImageMedium,omitempty"`
+	CoverImageLarge      *string     `json:"coverImageLarge,omitempty"`
+	CoverImageExtraLarge *string     `json:"coverImageExtraLarge,omitempty"`
+	BannerImage          *string     `json:"bannerImage,omitempty"`
+	Season               *string     `json:"season,omitempty"`
+	SeasonYear           *int        `json:"seasonYear,omitempty"`
+	Year                 *int        `json:"year,omitempty"`
+	Popularity           int         `json:"popularity"`
+	Favourites           int         `json:"favourites"`
+	Studios              []string    `json:"studios"`
+	Characters           []Character `json:"characters"`
+	Trailer              *Trailer    `json:"trailer,omitempty"`
+	Relations            []Relation  `json:"relations"`
+	Recommendations      []Media     `json:"recommendations"`
+	Source               *string     `json:"source,omitempty"`
+	Country              *string     `json:"country,omitempty"`
+	IsAdult              bool        `json:"isAdult"`
+	SiteURL              *string     `json:"siteUrl,omitempty"`
+	ListEntryID          *int        `json:"listEntryId,omitempty"`
+	ListStatus           *string     `json:"listStatus,omitempty"`
+	ListProgress         *int        `json:"listProgress,omitempty"`
+	ListScore            *float64    `json:"listScore,omitempty"`
+	ListNotes            *string     `json:"listNotes,omitempty"`
 }
 
 func (m Media) DisplayTitle() string {
@@ -107,15 +107,15 @@ func (m Media) ProgressLabel() string {
 }
 
 type MediaList struct {
-	ID        int
-	Media     Media
-	Status    string
-	Progress  int
-	Score     float64
-	Notes     *string
-	Repeat    int
-	Private   bool
-	UpdatedAt *int
+	ID        int     `json:"id"`
+	Media     Media   `json:"media"`
+	Status    string  `json:"status"`
+	Progress  int     `json:"progress"`
+	Score     float64 `json:"score"`
+	Notes     *string `json:"notes,omitempty"`
+	Repeat    int     `json:"repeat"`
+	Private   bool    `json:"private"`
+	UpdatedAt *int    `json:"updatedAt,omitempty"`
 }
 
 func (ml MediaList) DisplayScore() string {
@@ -154,47 +154,47 @@ func (ml MediaList) StatusDisplay() string {
 }
 
 type MediaListGroup struct {
-	Name    string
-	Status  string
-	Entries []MediaList
+	Name    string      `json:"name"`
+	Status  string      `json:"status"`
+	Entries []MediaList `json:"entries"`
 }
 
 type GenreStats struct {
-	Genre          string
-	Count          int
-	MeanScore      float64
-	MinutesWatched int
-	ChaptersRead   int
+	Genre          string  `json:"genre"`
+	Count          int     `json:"count"`
+	MeanScore      float64 `json:"meanScore"`
+	MinutesWatched int     `json:"minutesWatched"`
+	ChaptersRead   int     `json:"chaptersRead"`
 }
 
 type TagStats struct {
-	Tag       string
-	Count     int
-	MeanScore float64
+	Tag       string  `json:"tag"`
+	Count     int     `json:"count"`
+	MeanScore float64 `json:"meanScore"`
 }
 
 type UserStats struct {
-	AnimeCount           int
-	AnimeMeanScore       float64
-	AnimeMinutesWatched  int
-	AnimeEpisodesWatched int
-	MangaCount           int
-	MangaMeanScore       float64
-	MangaChaptersRead    int
-	MangaVolumesRead     int
-	AnimeWatching        int
-	AnimeCompleted       int
-	AnimePaused          int
-	AnimeDropped         int
-	AnimePlanning        int
-	MangaReading         int
-	MangaCompleted       int
-	MangaPaused          int
-	MangaDropped         int
-	MangaPlanning        int
-	TopAnimeGenres       []GenreStats
-	TopMangaGenres       []GenreStats
-	TopTags              []TagStats
+	AnimeCount           int          `json:"animeCount"`
+	AnimeMeanScore       float64      `json:"animeMeanScore"`
+	AnimeMinutesWatched  int          `json:"animeMinutesWatched"`
+	AnimeEpisodesWatched int          `json:"animeEpisodesWatched"`
+	MangaCount           int          `json:"mangaCount"`
+	MangaMeanScore       float64      `json:"mangaMeanScore"`
+	MangaChaptersRead    int          `json:"mangaChaptersRead"`
+	MangaVolumesRead     int          `json:"mangaVolumesRead"`
+	AnimeWatching        int          `json:"animeWatching"`
+	AnimeCompleted       int          `json:"animeCompleted"`
+	AnimePaused          int          `json:"animePaused"`
+	AnimeDropped         int          `json:"animeDropped"`
+	AnimePlanning        int          `json:"animePlanning"`
+	MangaReading         int          `json:"mangaReading"`
+	MangaCompleted       int          `json:"mangaCompleted"`
+	MangaPaused          int          `json:"mangaPaused"`
+	MangaDropped         int          `json:"mangaDropped"`
+	MangaPlanning        int          `json:"mangaPlanning"`
+	TopAnimeGenres       []GenreStats `json:"topAnimeGenres"`
+	TopMangaGenres       []GenreStats `json:"topMangaGenres"`
+	TopTags              []TagStats   `json:"topTags"`
 }
 
 func (s UserStats) AnimeDaysWatched() float64 {
@@ -202,16 +202,16 @@ func (s UserStats) AnimeDaysWatched() float64 {
 }
 
 type User struct {
-	ID           int
-	Name         string
-	AvatarMedium *string
-	AvatarLarge  *string
-	BannerImage  *string
-	About        *string
-	SiteURL      *string
-	CreatedAt    *int
-	UpdatedAt    *int
-	Stats        *UserStats
+	ID           int        `json:"id"`
+	Name         string     `json:"name"`
+	AvatarMedium *string    `json:"avatarMedium,omitempty"`
+	AvatarLarge  *string    `json:"avatarLarge,omitempty"`
+	BannerImage  *string    `json:"bannerImage,omitempty"`
+	About        *string    `json:"about,omitempty"`
+	SiteURL      *string    `json:"siteUrl,omitempty"`
+	CreatedAt    *int       `json:"createdAt,omitempty"`
+	UpdatedAt    *int       `json:"updatedAt,omitempty"`
+	Stats        *UserStats `json:"stats,omitempty"`
 }
 
 func (u User) AvatarURL() string {
