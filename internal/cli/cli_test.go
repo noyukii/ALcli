@@ -31,6 +31,19 @@ func TestExecuteNoArgsRequestsTUIAndPreservesImageOptions(t *testing.T) {
 	}
 }
 
+func TestHelpCommandShowsRootHelp(t *testing.T) {
+	setupConfig(t)
+	var out, errOut bytes.Buffer
+	if err := Execute([]string{"help"}, &out, &errOut); err != nil {
+		t.Fatalf("Execute(help): %v", err)
+	}
+	for _, want := range []string{"Usage:", "media", "profile", "list", "auth"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("help output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestExecuteRejectsInvalidOutputFormat(t *testing.T) {
 	setupConfig(t)
 	var out, errOut bytes.Buffer

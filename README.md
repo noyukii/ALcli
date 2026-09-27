@@ -40,6 +40,8 @@ Remove both commands:
 ## Usage
 
 ```bash
+anilist help
+al help media
 anilist
 al --images=kitty
 anilist --images=off
