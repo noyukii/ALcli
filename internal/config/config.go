@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 )
 
-const DefaultClientID = "38485" // AnilistTUI client
+const (
+	DefaultClientID = "38485" // Existing PIN login application
+	BrowserClientID = "52200" // ALcli by noyukii, localhost callback
+)
 
 type Config struct {
 	AccessToken  string `json:"access_token"`

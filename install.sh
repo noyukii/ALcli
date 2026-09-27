@@ -1,337 +1,143 @@
 #!/usr/bin/env bash
-# Install ALcli as `anilist` and `al`.
-#
-#   curl -fsSL https://raw.githubusercontent.com/noyukii/ALcli/main/install.sh | bash
-#
-#   ./install.sh
-#   ./install.sh --yes --prefix "$HOME/.local/bin"
-#   ./install.sh --uninstall
+# Install ALcli from a checksum-verified GitHub Release, or build a local checkout.
 set -euo pipefail
 
-MODULE="github.com/noyukii/ALcli"
 REPO="noyukii/ALcli"
-BIN_NAME="anilist"
-ALIAS_NAME="al"
-
+PREFIX="${ALCLI_PREFIX:-${HOME}/.local/bin}"
 YES=0
 UNINSTALL=0
-PREFIX="${ALCLI_PREFIX:-}"
+WITH_SKILL=0
+SKILL_DIR="${CODEX_HOME:-${HOME}/.codex}/skills/alcli"
+SKILL_RECEIPT="$SKILL_DIR/.installer-sha256"
+MANAGED_MARKER="ALCLI_INSTALLER_MANAGED"
 
 usage() {
-  cat <<EOF
-Usage: install.sh [options]
+  cat <<'HELP'
+Usage: install.sh [--prefix DIR] [--yes] [--with-skill codex] [--uninstall]
 
-Install ALcli so both \`anilist\` and \`al\` run it.
-
-Options:
-  --prefix DIR   Install directory (default: /usr/local/bin)
-  --yes          Skip prompts
-  --uninstall    Remove anilist and al from the prefix
-  -h, --help     Show this help
-EOF
+Install ALcli as anilist and al. Downloaded release archives are SHA256 verified.
+When run from the source checkout with Go installed, builds the local source.
+  --prefix DIR          Binary directory (default: ~/.local/bin)
+  --with-skill codex    Install the ALcli Codex skill too
+  --uninstall           Remove installed ALcli and installer-managed skill
+  --yes                 Skip confirmation prompts
+HELP
 }
 
-while [[ $# -gt 0 ]]; do
+while (($#)); do
   case "$1" in
-    --prefix)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        echo "Missing value for --prefix" >&2
-        exit 1
-      fi
-      PREFIX="$2"
-      shift 2
-      ;;
-    --prefix=*)
-      PREFIX="${1#*=}"
-      shift
-      ;;
-    -y|--yes)
-      YES=1
-      shift
-      ;;
-    --uninstall)
-      UNINSTALL=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 1
-      ;;
+    --prefix) [[ $# -ge 2 ]] || { echo 'Missing --prefix value' >&2; exit 2; }; PREFIX="$2"; shift 2 ;;
+    --prefix=*) PREFIX="${1#*=}"; shift ;;
+    --with-skill) [[ "${2:-}" == codex ]] || { echo 'Only --with-skill codex is supported' >&2; exit 2; }; WITH_SKILL=1; shift 2 ;;
+    --yes|-y) YES=1; shift ;;
+    --uninstall) UNINSTALL=1; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-if [[ "${ALCLI_YES:-}" == "1" ]]; then
-  YES=1
+confirm() {
+  if [[ "$YES" == 1 || "${ALCLI_YES:-}" == 1 ]]; then return 0; fi
+  if [[ ! -r /dev/tty ]]; then echo 'Pass --yes for noninteractive installation' >&2; return 1; fi
+  local answer
+  read -r -p "$1 [y/N] " answer < /dev/tty
+  [[ "$answer" == y || "$answer" == Y ]]
+}
+
+script_path="${BASH_SOURCE[0]:-}"
+script_dir="$(cd "$(dirname "$script_path")" && pwd)"
+local_checkout=0
+if [[ -n "$script_path" && -f "$script_path" && -f "$script_dir/go.mod" ]] && command -v go >/dev/null 2>&1; then
+  if command -v rg >/dev/null 2>&1; then
+    rg -q '^module github.com/noyukii/ALcli$' "$script_dir/go.mod" && local_checkout=1
+  elif head -n 1 "$script_dir/go.mod" | grep -q '^module github.com/noyukii/ALcli$'; then
+    local_checkout=1
+  fi
 fi
 
-# Interactive gum prompts must read the terminal. The script itself may be
-# arriving on stdin via `curl | bash`, so never redirect the script's stdin.
-tty_in() {
-  if [[ -r /dev/tty ]]; then
-    "$@" < /dev/tty
+hash_file() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
   else
-    "$@"
-  fi
-}
-
-say() {
-  if command -v gum >/dev/null 2>&1; then
-    gum style "$@"
-  else
-    printf '%s\n' "$*"
-  fi
-}
-
-die() {
-  if command -v gum >/dev/null 2>&1; then
-    gum style --foreground 196 "$*" >&2
-  else
-    echo "$*" >&2
-  fi
-  exit 1
-}
-
-confirm() {
-  local prompt="$1"
-  if [[ "$YES" -eq 1 ]]; then
-    return 0
-  fi
-  tty_in gum confirm "$prompt"
-}
-
-script_dir() {
-  if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
-    cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
-    return
-  fi
-  return 1
-}
-
-ensure_gum() {
-  if command -v gum >/dev/null 2>&1; then
-    return
-  fi
-
-  echo "gum is not installed. Installing it first..."
-  if command -v brew >/dev/null 2>&1; then
-    brew install gum
-    hash -r
-    return
-  fi
-
-  local os arch version url tmp bin dest
-  os="$(uname -s)"
-  arch="$(uname -m)"
-  case "$os" in
-    Darwin|Linux) ;;
-    *) die "Install gum manually, then rerun this script: https://github.com/charmbracelet/gum" ;;
-  esac
-  case "$arch" in
-    arm64|aarch64) arch="arm64" ;;
-    x86_64) arch="x86_64" ;;
-    *) die "Unsupported architecture: $arch" ;;
-  esac
-
-  version="$(curl -fsSL "https://api.github.com/repos/charmbracelet/gum/releases/latest" \
-    | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' \
-    | head -n 1)"
-  if [[ -z "$version" ]]; then
-    die "Could not determine the latest gum release."
-  fi
-
-  url="https://github.com/charmbracelet/gum/releases/download/v${version}/gum_${version}_${os}_${arch}.tar.gz"
-  tmp="$(mktemp -d)"
-  curl -fsSL "$url" | tar -xz -C "$tmp"
-  bin="$(find "$tmp" -type f -name gum -print -quit)"
-  if [[ -z "$bin" ]]; then
-    rm -rf "$tmp"
-    die "The gum archive did not contain a gum binary."
-  fi
-
-  dest="${HOME}/.local/bin"
-  mkdir -p "$dest"
-  install -m 755 "$bin" "$dest/gum"
-  rm -rf "$tmp"
-  export PATH="${dest}:${PATH}"
-  hash -r
-}
-
-ensure_go() {
-  if command -v go >/dev/null 2>&1; then
-    return
-  fi
-  say --foreground 196 "Go is required to build ALcli."
-  if command -v brew >/dev/null 2>&1 && confirm "Install Go with Homebrew?"; then
-    brew install go
-    hash -r
-    return
-  fi
-  die "Install Go from https://go.dev/dl/ and run this script again."
-}
-
-need_sudo() {
-  local dir="$1"
-  if [[ -d "$dir" && -w "$dir" ]]; then
+    echo 'shasum or sha256sum is required' >&2
     return 1
   fi
-  if [[ ! -e "$dir" ]]; then
-    local parent="$dir"
-    while [[ ! -d "$parent" && "$parent" != "/" ]]; do
-      parent="$(dirname "$parent")"
-    done
-    if [[ -w "$parent" ]]; then
-      return 1
-    fi
-  fi
-  return 0
 }
 
-run_priv() {
-  if [[ "${USE_SUDO:-0}" -eq 1 ]]; then
-    sudo "$@"
-  else
-    "$@"
-  fi
+managed_skill() {
+  [[ ! -L "$SKILL_DIR" && ! -L "$SKILL_DIR/SKILL.md" && ! -L "$SKILL_RECEIPT" ]] || return 1
+  [[ -f "$SKILL_DIR/SKILL.md" && -f "$SKILL_RECEIPT" ]] || return 1
+  grep -q "$MANAGED_MARKER" "$SKILL_DIR/SKILL.md" || return 1
+  [[ "$(cat "$SKILL_RECEIPT")" == "$(hash_file "$SKILL_DIR/SKILL.md")" ]]
 }
 
-prepare_prefix() {
-  if [[ -z "$PREFIX" ]]; then
-    if [[ "$YES" -eq 1 || ! -r /dev/tty ]]; then
-      PREFIX="/usr/local/bin"
-    else
-      PREFIX="$(tty_in gum choose --header "Where should anilist and al be installed?" --label-delimiter "|" \
-        "System-wide|/usr/local/bin" \
-        "Just for me|${HOME}/.local/bin")" || {
-        say "Cancelled."
-        exit 0
-      }
-    fi
-  fi
-
-  if need_sudo "$PREFIX"; then
-    if ! confirm "Writing to ${PREFIX} needs sudo. Continue?"; then
-      say "Cancelled."
-      exit 0
-    fi
-    USE_SUDO=1
-    run_priv mkdir -p "$PREFIX"
-  else
-    USE_SUDO=0
-    mkdir -p "$PREFIX"
+remove_skill() {
+  if managed_skill; then
+    rm -f "$SKILL_DIR/SKILL.md" "$SKILL_RECEIPT"
+    rmdir "$SKILL_DIR" 2>/dev/null || true
+  elif [[ -e "$SKILL_DIR" ]]; then
+    echo "Preserved an unmanaged or modified skill at $SKILL_DIR." >&2
   fi
 }
 
-local_source() {
-  local dir=""
-  dir="$(script_dir 2>/dev/null || true)"
-  if [[ -n "$dir" && -f "${dir}/go.mod" ]] && grep -q "module ${MODULE}" "${dir}/go.mod"; then
-    printf '%s\n' "$dir"
-    return
-  fi
-  if [[ -f "./go.mod" ]] && grep -q "module ${MODULE}" "./go.mod"; then
-    pwd
-  fi
-}
+if [[ "$UNINSTALL" == 1 ]]; then
+  confirm "Remove ALcli from $PREFIX?" || exit 0
+  rm -f "$PREFIX/al"
+  rm -f "$PREFIX/anilist"
+  remove_skill
+  echo 'ALcli removed.'
+  exit 0
+fi
 
-uninstall_cmds() {
-  prepare_prefix
-  local target
-  if [[ -L "${PREFIX}/${ALIAS_NAME}" ]]; then
-    target="$(readlink "${PREFIX}/${ALIAS_NAME}")"
-    case "$target" in
-      "${BIN_NAME}"|"${PREFIX}/${BIN_NAME}")
-        run_priv rm -f "${PREFIX}/${ALIAS_NAME}"
-        ;;
-    esac
-  fi
-  if [[ -f "${PREFIX}/${BIN_NAME}" ]]; then
-    run_priv rm -f "${PREFIX}/${BIN_NAME}"
-  fi
-  say --foreground 212 --bold "Removed ${BIN_NAME} and ${ALIAS_NAME} from ${PREFIX}."
-}
+confirm "Install ALcli to $PREFIX?" || exit 0
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 
-install_cmds() {
-  local source build_dir action result
-  action="Install"
-  result="installed"
-  if [[ -e "${PREFIX}/${BIN_NAME}" || -e "${PREFIX}/${ALIAS_NAME}" ]]; then
-    action="Update"
-    result="updated"
-  fi
-  source="$(local_source || true)"
-  build_dir="$(mktemp -d)"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$build_dir'" EXIT
-
-  ensure_go
-
-  if [[ -n "$source" ]]; then
-    gum spin --show-error --spinner dot --title "Building ALcli..." -- \
-      bash -c 'cd "$1" && go build -trimpath -ldflags "-s -w" -o "$2/anilist" .' _ "$source" "$build_dir"
-  else
-    gum spin --show-error --spinner dot --title "Downloading ALcli..." -- \
-      env GOBIN="$build_dir" go install "${MODULE}@latest"
-    if [[ -f "${build_dir}/ALcli" ]]; then
-      mv "${build_dir}/ALcli" "${build_dir}/anilist"
-    fi
-  fi
-
-  if [[ ! -x "${build_dir}/anilist" ]]; then
-    die "Build finished without an anilist binary."
-  fi
-
-  if [[ "$action" == "Update" && "$YES" -ne 1 ]]; then
-    if ! confirm "An existing ALcli installation was detected in ${PREFIX}. Update it?"; then
-      say "Cancelled."
-      exit 0
-    fi
-  fi
-
-  run_priv install -m 755 "${build_dir}/anilist" "${PREFIX}/${BIN_NAME}"
-  run_priv ln -sfn "$BIN_NAME" "${PREFIX}/${ALIAS_NAME}"
-
-  say --foreground 212 --border double --border-foreground 212 --align center \
-    --width 46 --margin "1 2" --padding "1 2" --bold \
-    "ALcli ${result}" "anilist" "al"
-
-  case ":${PATH}:" in
-    *":${PREFIX}:"*) ;;
-    *)
-      say --foreground 214 "Add ${PREFIX} to your PATH:"
-      say --bold "export PATH=\"${PREFIX}:\$PATH\""
-      ;;
+if [[ "$local_checkout" == 1 ]]; then
+  (cd "$script_dir" && go build -o "$work/anilist" .)
+  skill_source="$script_dir/plugin/skills/alcli/SKILL.md"
+else
+  command -v curl >/dev/null 2>&1 || { echo 'curl is required' >&2; exit 1; }
+  command -v tar >/dev/null 2>&1 || { echo 'tar is required' >&2; exit 1; }
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$os" in darwin|linux) ;; *) echo "Unsupported OS: $os" >&2; exit 1 ;; esac
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64 ;;
+    arm64|aarch64) arch=arm64 ;;
+    *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
   esac
-}
+  archive="alcli_${os}_${arch}.tar.gz"
+  base="${ALCLI_RELEASE_BASE_URL:-https://github.com/${REPO}/releases/latest/download}"
+  curl -fsSL "$base/checksums.txt" -o "$work/checksums.txt"
+  curl -fsSL "$base/$archive" -o "$work/$archive"
+  expected="$(awk -v name="$archive" '$2 == name {print $1}' "$work/checksums.txt")"
+  [[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] || { echo 'Release checksum is missing or invalid' >&2; exit 1; }
+  actual="$(hash_file "$work/$archive")"
+  [[ "$actual" == "$expected" ]] || { echo 'Release checksum mismatch' >&2; exit 1; }
+  tar -xzf "$work/$archive" -C "$work" anilist skills/alcli/SKILL.md
+  skill_source="$work/skills/alcli/SKILL.md"
+fi
 
-main() {
-  ensure_gum
-
-  say --foreground 212 --border-foreground 212 --border double --align center \
-    --width 46 --margin "1 2" --padding "1 2" --bold \
-    "ALcli" "AniList in the terminal"
-
-  if [[ "$UNINSTALL" -eq 1 ]]; then
-    uninstall_cmds
-    exit 0
+if [[ "$WITH_SKILL" == 1 ]]; then
+  [[ -f "$skill_source" ]] || { echo 'ALcli skill is missing' >&2; exit 1; }
+  if [[ -e "$SKILL_DIR" ]] && ! managed_skill; then
+    echo "Cannot replace an unmanaged skill: $SKILL_DIR" >&2; exit 1
   fi
+fi
 
-  if [[ "$YES" -ne 1 && ! -r /dev/tty ]]; then
-    die "No terminal available for prompts. Re-run with --yes --prefix DIR."
-  fi
+[[ -x "$work/anilist" ]] || { echo 'Archive has no executable anilist' >&2; exit 1; }
+mkdir -p "$PREFIX"
+install -m 755 "$work/anilist" "$PREFIX/anilist"
+ln -sfn anilist "$PREFIX/al"
 
-  say "Installs ${BIN_NAME} and ${ALIAS_NAME} from github.com/${REPO}."
-  if ! confirm "Install ALcli?"; then
-    say "Cancelled."
-    exit 0
-  fi
+if [[ "$WITH_SKILL" == 1 ]]; then
+  mkdir -p "$SKILL_DIR"
+  install -m 644 "$skill_source" "$SKILL_DIR/SKILL.md"
+  hash_file "$SKILL_DIR/SKILL.md" > "$SKILL_RECEIPT"
+  chmod 600 "$SKILL_RECEIPT"
+fi
 
-  prepare_prefix
-  install_cmds
-}
-
-main
+echo "Installed ALcli to $PREFIX/anilist (alias: al)."
+if [[ "$WITH_SKILL" == 1 ]]; then echo "Installed Codex skill to $SKILL_DIR."; fi

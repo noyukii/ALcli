@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +15,10 @@ import (
 
 	"github.com/noyukii/ALcli/internal/api"
 	"github.com/noyukii/ALcli/internal/config"
+	"github.com/noyukii/ALcli/internal/mcpserver"
 )
+
+var newAPIClient = api.NewClient
 
 type commandState struct {
 	config *config.Config
@@ -85,7 +89,10 @@ func (s *commandState) root() *cobra.Command {
 		}
 		return nil
 	}
-	root.AddCommand(s.mediaCommand(), s.profileCommand(), s.listCommand(), s.favoritesCommand(), s.authCommand())
+	root.AddCommand(s.mediaCommand(), s.profileCommand(), s.listCommand(), s.favoritesCommand(), s.authCommand(), s.mcpCommand(), s.graphqlCommand(), s.actionsCommand())
+	for _, kind := range api.NamedKinds() {
+		root.AddCommand(s.namedCommand(kind))
+	}
 	root.Flags().BoolP("help", "h", false, "Help for al")
 	root.SetHelpCommand(&cobra.Command{Use: "help [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs, Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -105,7 +112,7 @@ func (s *commandState) client() (*api.Client, error) {
 	if !s.config.IsAuthenticated() {
 		return nil, errors.New("not logged in; run `al auth login` first")
 	}
-	return api.NewClient(s.config.AccessToken), nil
+	return newAPIClient(s.config.AccessToken), nil
 }
 
 func (s *commandState) emit(v any) error {
@@ -342,7 +349,7 @@ func (s *commandState) listCommand() *cobra.Command {
 }
 
 func (s *commandState) favoritesCommand() *cobra.Command {
-	return &cobra.Command{Use: "favorites", Short: "Show your favorite anime", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := &cobra.Command{Use: "favorites", Short: "Show your favorite anime", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		c, err := s.client()
 		if err != nil {
 			return err
@@ -361,8 +368,26 @@ func (s *commandState) favoritesCommand() *cobra.Command {
 		printMedia(s.out, items)
 		return nil
 	}}
-}
 
+	var kind string
+	var page, perPage int
+	sub := &cobra.Command{Use: "list", Short: "List favorites of one kind", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		c, err := s.client()
+		if err != nil {
+			return err
+		}
+		value, err := c.FavoritesList(context.Background(), kind, page, perPage)
+		if err != nil {
+			return err
+		}
+		return s.emitData(value)
+	}}
+	sub.Flags().StringVar(&kind, "kind", "anime", "anime, manga, characters, staff, or studios.")
+	sub.Flags().IntVar(&page, "page", 1, "Result page.")
+	sub.Flags().IntVar(&perPage, "per-page", 20, "Results per page (1–25).")
+	cmd.AddCommand(sub)
+	return cmd
+}
 func (s *commandState) authCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "auth", Short: "Manage AniList authentication"}
 	cmd.AddCommand(&cobra.Command{Use: "status", Short: "Show authentication status", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
@@ -393,9 +418,15 @@ func (s *commandState) authCommand() *cobra.Command {
 		fmt.Fprintln(s.out, "Logged out successfully.")
 		return nil
 	}})
-	cmd.AddCommand(&cobra.Command{Use: "login", Short: "Start the AniList login flow", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	login := &cobra.Command{Use: "login", Short: "Start the AniList login flow", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		browser, _ := cmd.Flags().GetBool("browser")
+		if browser {
+			return mcpserver.BrowserLogin(context.Background(), s.out)
+		}
 		return TUIRequest{Images: "auto", Login: true}
-	}})
+	}}
+	login.Flags().Bool("browser", false, "Open a local browser callback login flow.")
+	cmd.AddCommand(login)
 	return cmd
 }
 

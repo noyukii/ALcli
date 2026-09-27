@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ -n "${ALCLI_BIN:-}" ]; then
+  exec "$ALCLI_BIN" mcp stdio
+fi
+if command -v al >/dev/null 2>&1; then
+  exec al mcp stdio
+fi
+if [ -x "${HOME}/.local/bin/al" ]; then
+  exec "${HOME}/.local/bin/al" mcp stdio
+fi
+if [ -x /usr/local/bin/al ]; then
+  exec /usr/local/bin/al mcp stdio
+fi
+printf '%s\n' 'ALcli is not installed. Run the install command in the ALcli README.' >&2
+exit 127

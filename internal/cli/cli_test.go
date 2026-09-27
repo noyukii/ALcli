@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/noyukii/ALcli/internal/config"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -162,5 +165,45 @@ func TestLogoutCommandRemovesSavedConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(configFile); !os.IsNotExist(err) {
 		t.Fatalf("config still exists; stat error = %v", err)
+	}
+}
+
+func TestGraphQLAndNamedActionsAgainstMock(t *testing.T) {
+	setupConfig(t)
+	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if !strings.Contains(body.Query, "Viewer") && !strings.Contains(body.Query, "ToggleFollow") {
+			t.Errorf("query = %q", body.Query)
+		}
+		_, _ = io.WriteString(w, `{"data":{"Viewer":{"id":7},"ToggleFollow":{"id":8}}}`)
+	}))
+	defer endpoint.Close()
+	original := newAPIClient
+	newAPIClient = func(token string) *api.Client { return api.NewClientAt(token, endpoint.URL) }
+	defer func() { newAPIClient = original }()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.AccessToken = "mock-token"
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"graphql", "query", "--document", "query { Viewer { id } }"},
+		{"action", "follows_toggle", "--variables", `{"userId":8}`},
+	} {
+		var out, errOut bytes.Buffer
+		if err := Execute(args, &out, &errOut); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "7") && !strings.Contains(out.String(), "8") {
+			t.Errorf("output=%s", out.String())
+		}
 	}
 }
