@@ -14,7 +14,7 @@
     ]
   },
   "name": "alcli",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Use ALcli to explore AniList and manage the signed-in user's account through a local MCP server.",
   "author": { "name": "noyukii" },
   "keywords": [],
